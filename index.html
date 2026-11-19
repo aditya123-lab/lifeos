@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="id" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>LIFE OS — Build Discipline. Track Progress. Master Your Life.</title>
+  <meta name="description" content="LIFE OS — sistem operasi pribadi untuk disiplin, progres, dan pengembangan diri.">
+  <meta name="theme-color" content="#0b0b10" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#0b0b10">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="LIFE OS">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="stylesheet" href="css/styles.css">
+  <script>
+    // apply theme before first paint (avoids flash)
+    try { var s = JSON.parse(localStorage.getItem('lifeos.state.v1') || '{}'); var t = (s.settings && s.settings.theme) || 'dark';
+      if (t === 'system') t = matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+      document.documentElement.dataset.theme = t; } catch (e) {}
+  </script>
+</head>
+<body>
+  <div class="app" id="app">
+    <aside class="sidebar" id="sidebar" aria-label="Navigasi utama"></aside>
+    <main class="main">
+      <header class="topbar" id="topbar"></header>
+      <div id="banner"></div>
+      <section id="view" class="view" tabindex="-1" aria-live="polite"></section>
+    </main>
+    <nav class="bottom-nav" id="bottomnav" aria-label="Navigasi"></nav>
+  </div>
+  <div id="timer-dock"></div>
+  <div id="toasts" aria-live="polite"></div>
+  <noscript><p style="padding:24px">LIFE OS membutuhkan JavaScript.</p></noscript>
+
+  <script src="js/core.js"></script>
+  <script src="js/store.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/app.js"></script>
+  <script src="js/pages/dashboard.js"></script>
+  <script src="js/pages/habits.js"></script>
+  <script src="js/pages/study.js"></script>
+  <script src="js/pages/copywriting.js"></script>
+  <script src="js/pages/fitness.js"></script>
+  <script src="js/pages/nutrition.js"></script>
+  <script src="js/pages/supplements.js"></script>
+  <script src="js/pages/private.js"></script>
+  <script src="js/pages/calendar.js"></script>
+  <script src="js/pages/progress.js"></script>
+  <script src="js/pages/settings.js"></script>
+  <script src="js/notify.js"></script>
+  <script>App.start();</script>
+</body>
+</html>
