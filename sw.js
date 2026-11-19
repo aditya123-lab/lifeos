@@ -1,10 +1,10 @@
 /* LIFE OS — service worker: offline app shell, notification clicks, optional Web Push. */
-const VERSION = 'lifeos-v1.1.0';
+const VERSION = 'lifeos-v1.2.2';
 const SHELL = [
   './', 'index.html', 'manifest.webmanifest', 'css/styles.css',
   'js/core.js', 'js/store.js', 'js/ui.js', 'js/app.js', 'js/notify.js',
   'js/pages/dashboard.js', 'js/pages/habits.js', 'js/pages/study.js', 'js/pages/copywriting.js', 'js/pages/fitness.js',
-  'js/pages/nutrition.js', 'js/pages/supplements.js', 'js/pages/private.js', 'js/pages/calendar.js', 'js/pages/progress.js', 'js/pages/settings.js',
+  'js/pages/nutrition.js', 'js/pages/supplements.js', 'js/pages/journal.js', 'js/pages/private.js', 'js/pages/calendar.js', 'js/pages/progress.js', 'js/pages/settings.js',
   'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/maskable-512.png', 'icons/badge-72.png'
 ];
 

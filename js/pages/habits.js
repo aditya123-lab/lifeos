@@ -62,7 +62,7 @@
     const s = App.S();
     const h = id ? s.habits.find(x => x.id === id) : null;
     const rem = h && s.reminders.find(r => r.id === 'rh_' + h.id);
-    const linkOpts = [{ value: '', label: 'Tidak ada (centang manual)' }, { value: 'study', label: 'Selesai otomatis: target belajar tercapai' }, { value: 'copy', label: 'Selesai otomatis: target copywriting tercapai' }, { value: 'gym', label: 'Selesai otomatis: workout dicatat' }, { value: 'meals', label: 'Selesai otomatis: tracking makan lengkap' }, { value: 'water', label: 'Selesai otomatis: target air tercapai' }]
+    const linkOpts = [{ value: '', label: 'Tidak ada (centang manual)' }, { value: 'study', label: 'Selesai otomatis: target belajar tercapai' }, { value: 'copy', label: 'Selesai otomatis: target copywriting tercapai' }, { value: 'gym', label: 'Selesai otomatis: workout dicatat' }, { value: 'meals', label: 'Selesai otomatis: tracking makan lengkap' }, { value: 'water', label: 'Selesai otomatis: target air tercapai' }, { value: 'journal', label: 'Selesai otomatis: jurnal malam ditulis' }]
       .concat(s.supplements.map(sp => ({ value: 'supp:' + sp.id, label: 'Selesai otomatis: ' + sp.name + ' dicentang' })));
     const v = await UI.formModal({
       title: h ? 'Edit habit' : 'Habit baru',

@@ -13,6 +13,7 @@
     { id: 'fitness', label: 'Fitness', icon: 'dumbbell', group: 'mod' },
     { id: 'nutrition', label: 'Nutrisi', icon: 'leaf', group: 'mod' },
     { id: 'supplements', label: 'Suplemen', icon: 'pill', group: 'mod' },
+    { id: 'journal', label: 'Jurnal', icon: 'note', group: 'mod' },
     { id: 'private', label: 'Ruang Privat', icon: 'shield', group: 'mod' },
     { id: 'progress', label: 'Progress', icon: 'chart', group: 'growth' },
     { id: 'achievements', label: 'Achievement', icon: 'trophy', group: 'growth' },
@@ -149,6 +150,7 @@
       if (h.link === 'copy') return C.minutesOn(s.copy.sessions, k) + '/' + s.settings.copyTarget + ' mnt';
       if (h.link === 'water') return fmt(C.nutritionDay(s, k).water) + '/' + fmt(s.nutrition.targets.water) + ' ml';
       if (h.link === 'meals') return C.nutritionDay(s, k).mealsLogged + '/' + s.settings.mealsRequired + ' waktu makan';
+      if (h.link === 'journal') return C.countSentences((C.journalEntry(s, k) || {}).text) + '/' + (s.settings.journalMinSentences || 5) + ' kalimat';
       return '';
     },
 
@@ -166,7 +168,8 @@
         ${!today ? '<p class="note-box" style="margin-top:10px">Riwayat hari sebelumnya bersifat permanen dan tidak dapat diubah (mencegah klaim XP ganda).</p>' : ''}`;
       const actions = [];
       if (today) {
-        if (!st || st.s !== 'done') actions.push({ label: 'Selesai', cls: 'primary', onClick: () => App.toggleHabit(id, k) });
+        if (h.link === 'journal') actions.push({ label: 'Tulis jurnal', cls: 'primary', onClick: () => App.go('journal') });
+        else if (!st || st.s !== 'done') actions.push({ label: 'Selesai', cls: 'primary', onClick: () => App.toggleHabit(id, k) });
         if (st && st.s === 'done') actions.push({ label: 'Batalkan selesai', onClick: () => App.toggleHabit(id, k) });
         if (!st || st.s === 'done') actions.push({ label: 'Lewati…', onClick: () => { setTimeout(() => App.skipHabit(id, k), 220); } });
         if (st && st.s === 'skipped') actions.push({ label: 'Batalkan lewati', onClick: () => App.commit(s2 => C.unskipHabit(s2, id, k)) });
@@ -179,6 +182,8 @@
       const s = Store.get();
       const st = C.statusOf(s, k, id);
       if (k !== C.dateKey()) return UI.toast('Riwayat hari sebelumnya tidak dapat diubah', 'error');
+      const hh = s.habits.find(x => x.id === id);
+      if (hh && hh.link === 'journal' && !st) return App.go('journal'); // write the entry instead of ticking blindly
       App.commit(s2 => {
         const r = st && st.s === 'done' ? C.uncompleteHabit(s2, id, k) : C.completeHabit(s2, id, k);
         if (r && r.err) UI.toast(r.err, 'error');

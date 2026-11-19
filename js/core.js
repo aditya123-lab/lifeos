@@ -165,6 +165,7 @@
       H('h_shower_am', 'Mandi pagi', 'kebersihan', 'morning', 15, 1, true),
       H('h_teeth_am', 'Sikat gigi pagi', 'kebersihan', 'morning', 10, 1, true),
       H('h_skincare', 'Skincare', 'kebersihan', 'morning', 10, 1, false),
+      H('h_lotion_am', 'Lotion sebelum keluar rumah', 'kebersihan', 'morning', 10, 1, true),
       H('h_breakfast', 'Sarapan', 'pagi', 'morning', 20, 1, true),
       H('h_creatine', 'Minum creatine', 'fitness', 'morning', 20, 1, true, { link: 'supp:s_creatine' }),
       H('h_room', 'Membersihkan kamar', 'kebersihan', 'morning', 50, 2, false),
@@ -182,8 +183,12 @@
       H('h_meals', 'Tracking nutrisi lengkap', 'fitness', 'evening', 50, 1, true, { link: 'meals' }),
       H('h_unfinished', 'Selesaikan tugas yang tertunda', 'malam', 'night', 20, 2, false),
       H('h_tomorrow', 'Siapkan jadwal besok', 'malam', 'night', 20, 1, true),
-      H('h_reflect', 'Review pencapaian & jurnal', 'malam', 'night', 30, 1, true),
+      H('h_reflect', 'Review pencapaian hari ini', 'malam', 'night', 30, 1, true),
+      H('h_journal', 'Jurnal malam (±5 kalimat)', 'malam', 'night', 40, 1, true, { time: '21:45', link: 'journal' }),
       H('h_teeth_pm', 'Sikat gigi malam', 'kebersihan', 'night', 10, 1, true),
+      H('h_faceWash_pm', 'Cuci muka sebelum tidur', 'kebersihan', 'night', 10, 1, true),
+      H('h_skincare_pm', 'Skincare malam', 'kebersihan', 'night', 10, 1, false),
+      H('h_lotion_pm', 'Lotion sebelum tidur', 'kebersihan', 'night', 10, 1, true),
       H('h_clothes', 'Ganti pakaian & pakaian dalam', 'kebersihan', 'night', 10, 1, true),
       H('h_grooming', 'Grooming (kuku, rambut, dll.)', 'kebersihan', 'night', 10, 1, false, { days: [0, 3] }),
       H('h_bathroom', 'Bersihkan kamar mandi', 'kebersihan', 'night', 30, 2, false, { days: [6] }),
@@ -202,6 +207,7 @@
       R('r_copy', 'Copywriting', '20:30', ALL, 'copy', 'Latihan copywriting 30 menit.'),
       R('r_meal', 'Tracking makan', '21:00', ALL, 'meal', 'Sudah catat semua makanan hari ini?'),
       R('r_night', 'Rutinitas malam', '21:30', ALL, 'routine', 'Review hari ini dan siapkan jadwal besok.'),
+      R('r_journal', 'Jurnal malam', '21:45', ALL, 'routine', 'Sebelum tidur: tulis jurnal singkat ±5 kalimat.'),
       // Private: deliberately generic body. No details in notification previews.
       R('r_private', 'Check-in harian', '21:45', ALL, 'private', 'Waktunya check-in harian singkat.', false)
     ];
@@ -233,7 +239,7 @@
         levelBase: 100, levelExp: 1.3,
         studyTarget: 60, studyTargetExam: 120, examMode: false,
         copyTarget: 30, gymPerWeek: 3, gymDays, gymTime: '16:30', gymDuration: 75,
-        mealsRequired: 3,
+        mealsRequired: 3, journalMinSentences: 5,
         pomodoro: { focus: 25, short: 5, long: 10, focus2: 50 },
         notif: { enabled: false, quietStart: '22:30', quietEnd: '04:45', inApp: true },
         achievementsEnabled: true, rewardsEnabled: true,
@@ -289,8 +295,9 @@
       events: [],         // { id, title, type, date, start, end, recur, until, exceptions:[], reminder, notes }
       reminders: defaultReminders(gymDays),
       reminderLog: {},    // { 'date|reminderId': at }  (prevents duplicate firing)
+      journal: { entries: {} }, // { 'YYYY-MM-DD': { text, mood (1-5|0), at, updatedAt } }
       timer: null,        // running timer persisted across reloads
-      migrations: { englishWeekend: true }
+      migrations: { englishWeekend: true, journal: true, bodycare: true, faceWash: true }
     };
   }
 
@@ -299,6 +306,9 @@
     if (!raw || typeof raw !== 'object') throw new Error('Data tidak valid');
     const base = defaultState();
     const needEnglishWeekend = !(raw.migrations && raw.migrations.englishWeekend);
+    const needJournal = !(raw.migrations && raw.migrations.journal);
+    const needBodycare = !(raw.migrations && raw.migrations.bodycare);
+    const needFaceWash = !(raw.migrations && raw.migrations.faceWash);
     const merge = (def, val) => {
       if (Array.isArray(def)) return Array.isArray(val) ? val : def;
       if (def && typeof def === 'object') {
@@ -314,6 +324,7 @@
     // objects that are maps must keep only the raw content (not defaults merged in)
     for (const k of ['logs', 'restDays', 'topPicks', 'achievements', 'suppLogs', 'reminderLog']) s[k] = (raw[k] && typeof raw[k] === 'object') ? raw[k] : {};
     s.nutrition.days = (raw.nutrition && raw.nutrition.days) || {};
+    s.journal.entries = (raw.journal && raw.journal.entries && typeof raw.journal.entries === 'object') ? raw.journal.entries : {};
     s.selfControl.checkins = (raw.selfControl && raw.selfControl.checkins) || {};
     if (raw.fitness && raw.fitness.split) s.fitness.split = raw.fitness.split;
     if (needEnglishWeekend) { // English practice: optional, but mandatory on Fri/Sat/Sun
@@ -321,6 +332,32 @@
       if (e && !e.mandatory && !(e.mandatoryDays && e.mandatoryDays.length)) e.mandatoryDays = [5, 6, 0];
       s.migrations.englishWeekend = true;
     }
+    if (needJournal) { // nightly journal habit + reminder (added later; existing users get it once)
+      const today = dateKey();
+      const r = s.habits.find(h => h.id === 'h_reflect');
+      if (r && r.name === 'Review pencapaian & jurnal') r.name = 'Review pencapaian hari ini';
+      if (!s.habits.some(h => h.id === 'h_journal')) {
+        const def = base.habits.find(h => h.id === 'h_journal');
+        s.habits.push(Object.assign({}, def, { createdAt: today, order: r && typeof r.order === 'number' ? r.order + 0.5 : s.habits.length }));
+      }
+      if (!s.reminders.some(x => x.id === 'r_journal')) s.reminders.push(Object.assign({}, base.reminders.find(x => x.id === 'r_journal')));
+      s.migrations.journal = true;
+    }
+    if (needBodycare) { // lotion AM (wajib), skincare PM (opsional), lotion PM (wajib)
+      const today = dateKey();
+      for (const [id, after] of [['h_lotion_am', 'h_skincare'], ['h_skincare_pm', 'h_teeth_pm'], ['h_lotion_pm', 'h_skincare_pm']]) {
+        if (s.habits.some(h => h.id === id)) continue;
+        const prev = s.habits.find(h => h.id === after);
+        s.habits.push(Object.assign({}, base.habits.find(h => h.id === id), { createdAt: today, order: prev && typeof prev.order === 'number' ? prev.order + 0.1 : s.habits.length }));
+      }
+      s.migrations.bodycare = true;
+    }
+    if (needFaceWash && !s.habits.some(h => h.id === 'h_faceWash_pm')) { // between brushing teeth and night skincare
+      const a = s.habits.find(h => h.id === 'h_teeth_pm'), b = s.habits.find(h => h.id === 'h_skincare_pm');
+      const order = a && b ? (a.order + b.order) / 2 : a ? a.order + 0.05 : s.habits.length;
+      s.habits.push(Object.assign({}, base.habits.find(h => h.id === 'h_faceWash_pm'), { createdAt: dateKey(), order }));
+    }
+    if (s.migrations) s.migrations.faceWash = true;
     s.version = 1;
     return s;
   }
@@ -496,6 +533,19 @@
   }
   function workoutsIn(state, from, to) { return state.fitness.workouts.filter(w => w.date >= from && w.date <= to); }
 
+  /** Count sentences: split on . ! ? … or line breaks; a fragment counts if it has at least 2 words. */
+  function countSentences(text) {
+    return String(text || '').split(/[.!?…]+|\n+/).map(x => x.trim()).filter(x => x.split(/\s+/).filter(Boolean).length >= 2).length;
+  }
+  function journalEntry(state, k) { return (state.journal && state.journal.entries[k]) || null; }
+  function journalDone(state, k) { const e = journalEntry(state, k); return !!e && countSentences(e.text) >= (state.settings.journalMinSentences || 5); }
+  function journalDays(state) { return Object.keys((state.journal && state.journal.entries) || {}).filter(k => journalDone(state, k)).length; }
+  function journalStreak(state, today = dateKey()) {
+    let n = 0, d = journalDone(state, today) ? today : addDays(today, -1);
+    while (journalDone(state, d)) { n++; d = addDays(d, -1); }
+    return n;
+  }
+
   /** Evaluate whether a linked habit's condition is satisfied on date k. */
   function linkSatisfied(state, h, k) {
     const L = h.link || '';
@@ -504,6 +554,7 @@
     if (L === 'gym') return state.fitness.workouts.some(w => w.date === k);
     if (L === 'water') return nutritionDay(state, k).water >= state.nutrition.targets.water;
     if (L === 'meals') return nutritionDay(state, k).mealsLogged >= state.settings.mealsRequired;
+    if (L === 'journal') return journalDone(state, k);
     if (L.startsWith('supp:')) { const id = L.slice(5); return !!(state.suppLogs[k] && state.suppLogs[k][id]); }
     return null;
   }
@@ -605,6 +656,8 @@
     { id: 'early_bird', name: 'Early Bird', desc: 'Bangun tepat waktu 7 hari berturut-turut.', xp: 200, icon: 'sunrise', tier: 2, prog: s => [maxRun(s, 'h_wake'), 7] },
     { id: 'clean_env', name: 'Clean Environment', desc: 'Bersihkan kamar selama 14 hari.', xp: 200, icon: 'home', tier: 2, prog: s => [countDone(s, 'h_room'), 14] },
     { id: 'hydrated', name: 'Hydrated', desc: 'Capai target air minum 14 hari.', xp: 150, icon: 'drop', tier: 1, prog: s => [Object.keys(s.nutrition.days).filter(k => (s.nutrition.days[k].water || 0) >= s.nutrition.targets.water).length, 14] },
+    { id: 'reflective', name: 'Reflective Mind', desc: 'Tulis jurnal malam selama 7 hari.', xp: 150, icon: 'note', tier: 1, prog: s => [journalDays(s), 7] },
+    { id: 'chronicler', name: 'Chronicler', desc: 'Tulis jurnal malam selama 30 hari.', xp: 500, icon: 'note', tier: 3, prog: s => [journalDays(s), 30] },
     { id: 'gold', name: 'Golden Path', desc: 'Capai rank Gold (Level 11).', xp: 300, icon: 'medal', tier: 2, prog: s => [levelInfo(totalXP(s), s.settings.levelBase, s.settings.levelExp).level, 11] }
   ];
   /** Returns newly unlocked achievements (and awards their XP). Loops until stable because XP can unlock 'gold'. */
@@ -817,7 +870,7 @@
     nutrientsFor, sumNutrients, suggestTargets, defaultState, defaultHabits, migrate,
     xpRequired, cumulativeXP, rankFor, levelInfo, totalXP, spentXP, balanceXP, awardXP, revokeXP, hasActiveTx, xpOnDate,
     isScheduled, isMandatoryOn, habitsFor, statusOf, dayStats, isSuccessDay, currentStreak, longestStreak, rangeCompletion, restDaysInWeek,
-    habitConsistency, countDone, maxRun, priorityTasks, minutesOn, minutesIn, studyTarget, nutritionDay, workoutsIn, linkSatisfied,
+    habitConsistency, countDone, maxRun, priorityTasks, minutesOn, minutesIn, studyTarget, nutritionDay, workoutsIn, linkSatisfied, countSentences, journalEntry, journalDone, journalDays, journalStreak,
     habitKey, completeHabit, uncompleteHabit, skipHabit, unskipHabit, checkRoutineBonus, syncLinked,
     ACHIEVEMENTS, checkAchievements, nextAchievement, studyMinutesTotal, mealDays, bestWeekPct,
     PRIVATE_MILESTONES, PRIVATE_XP, privateStreak, privateClaimMilestones, privateSetback,

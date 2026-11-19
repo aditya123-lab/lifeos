@@ -221,4 +221,58 @@ t('optional habit mandatory on specific days (English Fri/Sat/Sun)', () => {
   assert.deepStrictEqual(C.migrate(JSON.parse(JSON.stringify(m))).habits.find(h => h.id === 'h_english').mandatoryDays, []);
 });
 
+t('journal: sentence count, auto-complete habit, migration for existing data', () => {
+  assert.strictEqual(C.countSentences(''), 0);
+  assert.strictEqual(C.countSentences('Hari ini capek. Tapi gym jalan! Belajar 2 jam? Ok.'), 3); // "Ok" is 1 word -> ignored
+  assert.strictEqual(C.countSentences('baris satu dua\nbaris dua tiga\n\nbaris tiga empat'), 3);
+  const now = at('2026-11-19', 21, 50), k = '2026-11-19';
+  const s = C.defaultState(at('2026-11-10'));
+  assert.ok(s.habits.some(h => h.id === 'h_journal' && h.link === 'journal' && h.mandatory));
+  s.journal.entries[k] = { text: 'Satu dua. Tiga empat. Lima enam. Tujuh delapan.', mood: 4 };
+  C.syncLinked(s, now);
+  assert.ok(!(C.statusOf(s, k, 'h_journal') || {}).s);
+  s.journal.entries[k].text += ' Sembilan sepuluh.';
+  C.syncLinked(s, now);
+  assert.strictEqual(C.statusOf(s, k, 'h_journal').s, 'done');
+  const xp = C.totalXP(s);
+  C.syncLinked(s, now); assert.strictEqual(C.totalXP(s), xp); // no double XP
+  s.journal.entries[k].text = 'Dihapus sebagian.';
+  C.syncLinked(s, now); assert.ok(!C.statusOf(s, k, 'h_journal')); // auto-completion reverts
+  assert.strictEqual(C.totalXP(s), xp - s.habits.find(h => h.id === 'h_journal').xp);
+  // old data (no journal, old reflect name) -> migrated once, entries preserved
+  const raw = JSON.parse(JSON.stringify(s));
+  delete raw.migrations.journal; delete raw.journal;
+  raw.habits = raw.habits.filter(h => h.id !== 'h_journal'); raw.reminders = raw.reminders.filter(r => r.id !== 'r_journal');
+  raw.habits.find(h => h.id === 'h_reflect').name = 'Review pencapaian & jurnal';
+  const m = C.migrate(raw);
+  assert.strictEqual(m.habits.filter(h => h.id === 'h_journal').length, 1);
+  assert.ok(m.reminders.some(r => r.id === 'r_journal'));
+  assert.strictEqual(m.habits.find(h => h.id === 'h_reflect').name, 'Review pencapaian hari ini');
+  assert.deepStrictEqual(m.journal.entries, {});
+  // user removes the habit later -> not re-added
+  m.habits = m.habits.filter(h => h.id !== 'h_journal'); m.journal.entries[k] = { text: 'a b. c d.' };
+  const m2 = C.migrate(JSON.parse(JSON.stringify(m)));
+  assert.ok(!m2.habits.some(h => h.id === 'h_journal'));
+  assert.strictEqual(m2.journal.entries[k].text, 'a b. c d.');
+});
+
+t('bodycare habits: lotion AM/PM mandatory, skincare PM optional, migrated once in order', () => {
+  const s = C.defaultState(at('2026-11-10'));
+  const g = id => s.habits.find(h => h.id === id);
+  assert.ok(g('h_lotion_am').mandatory && g('h_lotion_am').period === 'morning');
+  assert.ok(!g('h_skincare_pm').mandatory && g('h_skincare_pm').period === 'night');
+  assert.ok(g('h_lotion_pm').mandatory && g('h_lotion_pm').period === 'night');
+  const raw = JSON.parse(JSON.stringify(s)); delete raw.migrations.bodycare;
+  raw.habits = raw.habits.filter(h => !['h_lotion_am', 'h_skincare_pm', 'h_lotion_pm'].includes(h.id));
+  const m = C.migrate(raw);
+  const night = C.habitsFor(m, '2026-11-19').filter(h => h.period === 'night').map(h => h.id);
+  assert.ok(night.indexOf('h_teeth_pm') < night.indexOf('h_skincare_pm') && night.indexOf('h_skincare_pm') < night.indexOf('h_lotion_pm'));
+  const raw2 = JSON.parse(JSON.stringify(m)); delete raw2.migrations.faceWash; raw2.habits = raw2.habits.filter(h => h.id !== 'h_faceWash_pm');
+  const n2 = C.habitsFor(C.migrate(raw2), '2026-11-19').filter(h => h.period === 'night').map(h => h.id);
+  assert.deepStrictEqual(n2.slice(n2.indexOf('h_teeth_pm'), n2.indexOf('h_teeth_pm') + 4), ['h_teeth_pm', 'h_faceWash_pm', 'h_skincare_pm', 'h_lotion_pm']);
+  assert.ok(g('h_faceWash_pm').mandatory);
+  m.habits = m.habits.filter(h => h.id !== 'h_lotion_am');
+  assert.ok(!C.migrate(JSON.parse(JSON.stringify(m))).habits.some(h => h.id === 'h_lotion_am'));
+});
+
 console.log(`\n${passed} tests passed${process.exitCode ? ' (with failures)' : ''}`);

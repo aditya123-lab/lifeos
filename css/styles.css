@@ -130,6 +130,9 @@ p { margin: 0; }
 .chip { flex: none; display: inline-flex; align-items: center; gap: 6px; padding: 8px 12px; border-radius: 12px; background: var(--surface); border: 1px solid var(--border); color: var(--text2); font-size: .82rem; font-weight: 600; cursor: pointer; }
 .chip:hover { border-color: var(--border2); color: var(--text); }
 .chip .ic { color: var(--accent); }
+.chip.active { background: color-mix(in srgb, var(--accent) 18%, transparent); border-color: var(--accent); color: var(--text); }
+details > summary { cursor: pointer; list-style: none; } details > summary::-webkit-details-marker { display: none; } details > summary::before { content: '▸ '; } details[open] > summary::before { content: '▾ '; }
+#jText { min-height: 160px; line-height: 1.55; resize: vertical; }
 
 /* ---------- progress ---------- */
 .bar { height: 8px; border-radius: 99px; background: var(--track); overflow: hidden; }
