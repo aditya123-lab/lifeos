@@ -726,14 +726,23 @@
     }
     return got;
   }
-  function privateSetback(state, note, now = new Date()) {
+  /** Record a setback on day k (today by default; yesterday allowed). The new streak starts on that day. */
+  function privateSetback(state, note, now = new Date(), k = dateKey(now)) {
     const sc = state.selfControl;
-    const today = dateKey(now);
-    const days = privateStreak(state, today);
-    sc.longest = Math.max(sc.longest || 0, days);
-    sc.setbacks.push({ date: today, at: now.toISOString(), streak: days, note: (note || '').trim() });
-    sc.checkins[today] = { s: 'setback', at: now.toISOString() };
-    sc.streakStart = today;
+    if (!isEditable(k, now)) return false;
+    const days = Math.max(0, daysBetween(sc.streakStart || k, k));
+    sc.longest = Math.max(sc.longest || 0, privateStreak(state, dateKey(now)));
+    sc.setbacks.push({ date: k, at: now.toISOString(), streak: days, note: (note || '').trim() });
+    sc.checkins[k] = { s: 'setback', at: now.toISOString() };
+    if (!sc.streakStart || k >= sc.streakStart) sc.streakStart = k;
+    return true;
+  }
+  /** Mark day k (today or yesterday) as a clean check-in. Doesn't touch the streak itself. */
+  function privateCheckin(state, now = new Date(), k = dateKey(now)) {
+    const sc = state.selfControl;
+    if (!isEditable(k, now) || (sc.checkins[k] && sc.checkins[k].s === 'setback')) return false;
+    sc.checkins[k] = { s: 'clean', at: now.toISOString() };
+    return true;
   }
 
   // ---------------------------------------------------------------- calendar recurrence
@@ -886,7 +895,7 @@
     habitConsistency, countDone, maxRun, priorityTasks, minutesOn, minutesIn, studyTarget, nutritionDay, workoutsIn, linkSatisfied, isEditable, EDITABLE_DAYS, countSentences, journalEntry, journalDone, journalDays, journalStreak,
     habitKey, completeHabit, uncompleteHabit, skipHabit, unskipHabit, checkRoutineBonus, syncLinked,
     ACHIEVEMENTS, checkAchievements, nextAchievement, studyMinutesTotal, mealDays, bestWeekPct,
-    PRIVATE_MILESTONES, PRIVATE_XP, privateStreak, privateClaimMilestones, privateSetback,
+    PRIVATE_MILESTONES, PRIVATE_XP, privateStreak, privateClaimMilestones, privateSetback, privateCheckin,
     occursOn, calendarItems, inQuietHours, dueReminders, missedReminders, eventReminders, nextReminderTime, buildICS,
     greeting, currentPeriod, epley1RM, personalRecords, overlapsUniversity
   };

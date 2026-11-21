@@ -48,7 +48,11 @@
           <p class="small muted" style="margin-top:10px">Terpanjang: <b>${longest} hari</b> · Mulai: ${C.formatDate(sc.streakStart, { short: true })}</p></div>
         <div class="card"><h3 style="margin-bottom:10px">Check-in hari ini</h3>
           ${ci ? `<p class="small">${ci.s === 'clean' ? icon('check', 15, 'good') + ' Kamu sudah check-in: <b>hari ini aman</b>.' : icon('heart', 15, 'accent') + ' Setback dicatat. Hari ini adalah hari pertama yang baru.'}</p>` : `<p class="muted small" style="margin-bottom:12px">Jujur pada diri sendiri. Data ini hanya untukmu.</p>`}
-          <div class="row wrap" style="margin-top:10px">${!ci || ci.s !== 'clean' ? `<button class="btn primary" data-act="pvClean" ${ci && ci.s === 'setback' ? 'disabled' : ''}>${icon('check', 16)}Hari ini aman</button>` : ''}<button class="btn" data-act="pvSetback">Catat setback</button><button class="btn ghost" data-act="pvNote">${icon('note', 16)}Refleksi</button></div></div>
+          <div class="row wrap" style="margin-top:10px">${!ci || ci.s !== 'clean' ? `<button class="btn primary" data-act="pvClean" data-date="${k}" ${ci && ci.s === 'setback' ? 'disabled' : ''}>${icon('check', 16)}Hari ini aman</button>` : ''}<button class="btn" data-act="pvSetback" data-date="${k}">Catat setback</button><button class="btn ghost" data-act="pvNote">${icon('note', 16)}Refleksi</button></div>
+          ${(() => { const y = C.addDays(k, -1), cy = sc.checkins[y]; if (y < sc.activatedAt) return ''; return `<div class="divider"></div>
+            <p class="small"><b>Kemarin</b> · ${cy ? (cy.s === 'clean' ? `<span class="good">aman ${icon('check', 13)}</span>` : 'setback dicatat') : '<span class="warn">belum check-in</span>'}</p>
+            ${!cy ? `<div class="row wrap" style="margin-top:8px;gap:8px"><button class="btn sm primary" data-act="pvClean" data-date="${y}">${icon('check', 14)}Kemarin aman</button><button class="btn sm ghost" data-act="pvSetback" data-date="${y}">Setback kemarin</button></div>` : ''}
+            ${!cy ? '<p class="tiny muted" style="margin-top:6px">Lupa check-in? Masih bisa diisi sampai malam ini. Streak tidak putus hanya karena lupa check-in.</p>' : ''}`; })()}</div>
       </div>
       <button class="urge-btn" data-act="pvUrge">${icon('shield', 22)}<span><b>Dorongan datang?</b><small>Masuk Mode Bertahan · 90 detik</small></span>${icon('right', 18)}</button>
       ${(sc.urges || []).length ? `<p class="tiny muted" style="margin:8px 2px 0">Dorongan dikalahkan: <b class="good">${sc.urges.length}×</b>${(sc.urges || []).filter(u => u.date === k).length ? ` · hari ini ${(sc.urges || []).filter(u => u.date === k).length}×` : ''}</p>` : ''}
@@ -153,12 +157,19 @@
     pvStart: () => App.commit(s => { const k = C.dateKey(); Object.assign(s.selfControl, { active: true, activatedAt: s.selfControl.activatedAt || k, streakStart: k }); }, { quiet: true }),
     pvUnlock: async (f) => { const h = await hash(f.pin.value); if (h === App.S().settings.private.pinHash) { App.privateUnlocked = true; App.render(); } else { UI.toast('PIN salah', 'error'); f.pin.value = ''; } },
     pvLock: () => { App.privateUnlocked = false; if (!App.S().settings.private.pinHash) UI.toast('Pasang PIN dulu agar bisa dikunci', 'info'); App.render(); },
-    pvClean: () => App.commit(s => { s.selfControl.checkins[C.dateKey()] = { s: 'clean', at: new Date().toISOString() }; C.privateClaimMilestones(s); }, { quiet: false }),
-    pvSetback: async () => {
-      const v = await UI.formModal({ title: 'Catat setback', intro: `<p class="small" style="margin-bottom:10px">Terima kasih sudah jujur. Satu setback tidak menghapus progres yang sudah kamu bangun — streak terpanjangmu tetap tercatat. Gunakan ini sebagai informasi, bukan alasan menyalahkan diri.</p><p class="tiny muted" style="margin-bottom:10px">Pertanyaan refleksi: ${PROMPTS.map(esc).join(' · ')}</p>`,
+    pvClean: (el) => {
+      const k = (el && el.dataset.date) || C.dateKey(), y = k !== C.dateKey();
+      const r = el && el.getBoundingClientRect ? el.getBoundingClientRect() : null;
+      App.commit(s => { if (!C.privateCheckin(s, new Date(), k)) UI.toast('Hanya hari ini dan kemarin yang bisa diisi', 'error'); C.privateClaimMilestones(s); }, { quiet: false });
+      if (window.Motion && r) Motion.burst(r.left + r.width / 2, r.top + r.height / 2, 12);
+      UI.toast(y ? 'Check-in kemarin tercatat. Lanjutkan hari ini.' : 'Hari ini aman. Penjagamu bangga.', 'good');
+    },
+    pvSetback: async (el) => {
+      const k = (el && el.dataset.date) || C.dateKey(), y = k !== C.dateKey();
+      const v = await UI.formModal({ title: y ? 'Catat setback kemarin' : 'Catat setback', intro: `<p class="small" style="margin-bottom:10px">Terima kasih sudah jujur. Satu setback tidak menghapus progres yang sudah kamu bangun — streak terpanjangmu tetap tercatat. Gunakan ini sebagai informasi, bukan alasan menyalahkan diri.</p><p class="tiny muted" style="margin-bottom:10px">Pertanyaan refleksi: ${PROMPTS.map(esc).join(' · ')}</p>`,
         fields: [{ name: 'note', label: 'Refleksi (opsional, hanya untukmu)', type: 'textarea', rows: 4 }], submitLabel: 'Catat & mulai lagi' });
       if (!v) return;
-      App.commit(s => { C.privateSetback(s, v.note); s.selfControl.formSeen = 0; }, { quiet: true });
+      App.commit(s => { C.privateSetback(s, v.note, new Date(), k); s.selfControl.formSeen = C.privateStreak(s) ? window.Guardian.formOf(C.privateStreak(s)) : 0; }, { quiet: true });
       UI.celebrate({ title: 'Penjaga bangkit lagi', subtitle: 'Kamu tetap orang yang sedang bertumbuh. Streak terpanjangmu tetap tercatat. Fokus ke 24 jam ke depan.', iconName: 'heart', art: G.svg(0, { size: 120 }) });
     },
     pvNote: async () => {

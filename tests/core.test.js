@@ -293,4 +293,21 @@ t('yesterday editable: late journal after midnight completes yesterday, gives XP
   assert.ok(C.isEditable(y, late) && C.isEditable('2026-11-21', late) && !C.isEditable('2026-11-19', late) && !C.isEditable('2026-11-22', late));
 });
 
+t('private: check-in & setback for yesterday, streak unaffected by missed check-ins', () => {
+  const s = C.defaultState(at('2026-11-01'));
+  Object.assign(s.selfControl, { active: true, activatedAt: '2026-11-01', streakStart: '2026-11-10' });
+  const now = at('2026-11-21', 18, 40);
+  assert.strictEqual(C.privateStreak(s, '2026-11-21'), 11);          // no check-ins at all, streak still counts
+  assert.ok(C.privateCheckin(s, now, '2026-11-20'));
+  assert.strictEqual(s.selfControl.checkins['2026-11-20'].s, 'clean');
+  assert.ok(!C.privateCheckin(s, now, '2026-11-19'));                 // older -> locked
+  assert.ok(!C.privateSetback(s, 'x', now, '2026-11-19'));
+  assert.ok(C.privateSetback(s, 'lupa', now, '2026-11-20'));          // setback yesterday
+  assert.strictEqual(s.selfControl.streakStart, '2026-11-20');
+  assert.strictEqual(C.privateStreak(s, '2026-11-21'), 1);
+  assert.strictEqual(s.selfControl.longest, 11);
+  assert.strictEqual(s.selfControl.setbacks[0].streak, 10);
+  assert.ok(!C.privateCheckin(s, now, '2026-11-20'));                 // can't mark a setback day clean
+});
+
 console.log(`\n${passed} tests passed${process.exitCode ? ' (with failures)' : ''}`);

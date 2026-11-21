@@ -1,5 +1,5 @@
 /* LIFE OS — service worker: offline app shell, notification clicks, optional Web Push. */
-const VERSION = 'lifeos-v1.7.0';
+const VERSION = 'lifeos-v1.7.1';
 const SHELL = [
   './', 'index.html', 'manifest.webmanifest', 'css/styles.css',
   'js/core.js', 'js/store.js', 'js/ui.js', 'js/motion.js', 'js/character.js', 'js/guardian.js', 'js/app.js', 'js/notify.js',
