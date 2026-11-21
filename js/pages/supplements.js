@@ -19,7 +19,8 @@
           return `<div class="card ${sp.active ? '' : 'flat'}" style="${sp.active ? '' : 'opacity:.6'}">
             <div class="row"><div style="flex:1"><h3>${esc(sp.name)}</h3><p class="muted small">${sp.dose ? esc(sp.dose) + ' · ' : ''}Pengingat ${rem && rem.enabled ? rem.time : 'mati'}${sp.active ? '' : ' · nonaktif'}</p></div>
               <button class="icon-btn" data-act="suppEdit" data-id="${sp.id}" aria-label="Edit">${icon('edit', 17)}</button></div>
-            ${sp.active ? `<button class="btn block ${taken ? '' : 'primary'}" style="margin-top:12px" data-act="suppToggle" data-id="${sp.id}">${icon('check', 16)}${taken ? 'Sudah diminum ' + new Date(taken).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) + ' · batalkan' : 'Tandai sudah diminum hari ini'}</button>` : ''}
+            ${sp.active ? `<button class="btn block ${taken ? '' : 'primary'}" style="margin-top:12px" data-act="suppToggle" data-id="${sp.id}">${icon('check', 16)}${taken ? 'Sudah diminum ' + new Date(taken).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) + ' · batalkan' : 'Tandai sudah diminum hari ini'}</button>
+              ${C.addDays(k, -1) >= s.createdAt ? (() => { const y = C.addDays(k, -1), ty = s.suppLogs[y] && s.suppLogs[y][sp.id]; return `<button class="btn sm ghost block" style="margin-top:6px" data-act="suppToggle" data-id="${sp.id}" data-date="${y}">${ty ? icon('check', 14) + 'Kemarin: sudah diminum · batalkan' : 'Lupa centang kemarin? Tandai sudah diminum kemarin'}</button>`; })() : ''}` : ''}
             <div class="kpis" style="margin-top:12px;grid-template-columns:repeat(3,1fr)"><div class="kpi"><small>Streak</small><b>${run}</b><span>hari</span></div><div class="kpi"><small>30 hari</small><b>${hit}/${days.length}</b></div><div class="kpi"><small>Terlewat</small><b class="${missed ? 'warn' : ''}">${missed}</b><span>hari</span></div></div>
             <div style="margin-top:12px">${UI.heatmap(days.map(d => ({ v: s.suppLogs[d] && s.suppLogs[d][sp.id] ? 1 : 0, title: d })))}</div>
             ${missed ? `<p class="tiny muted" style="margin-top:8px">Terlewat: ${days.filter(d => d < k && !(s.suppLogs[d] && s.suppLogs[d][sp.id])).slice(-6).map(d => C.formatDate(d, { short: true, year: false })).join(', ')}${missed > 6 ? ', …' : ''}</p>` : ''}
@@ -30,8 +31,10 @@
 
   Object.assign(App.actions, {
     suppToggle: (el) => App.commit(s => {
-      const k = C.dateKey(); s.suppLogs[k] = s.suppLogs[k] || {};
-      if (s.suppLogs[k][el.dataset.id]) delete s.suppLogs[k][el.dataset.id]; else s.suppLogs[k][el.dataset.id] = new Date().toISOString();
+      const k = el.dataset.date || C.dateKey();
+      if (!C.isEditable(k)) return UI.toast('Hanya hari ini dan kemarin yang bisa diubah', 'error');
+      s.suppLogs[k] = s.suppLogs[k] || {};
+      if (s.suppLogs[k][el.dataset.id]) delete s.suppLogs[k][el.dataset.id]; else s.suppLogs[k][el.dataset.id] = k === C.dateKey() ? new Date().toISOString() : C.parseKey(k).toISOString();
     }),
     suppEdit: async (el) => {
       const s = App.S(); const sp = el.dataset.id ? s.supplements.find(x => x.id === el.dataset.id) : null;

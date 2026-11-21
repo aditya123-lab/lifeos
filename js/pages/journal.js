@@ -11,7 +11,14 @@
     ['Apa fokus utamaku besok?', 'Fokus besok: ']
   ];
   const timeOf = iso => iso ? new Date(iso).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : '';
-  let saveTimer = null, query = '';
+  let saveTimer = null, query = '', curK = null;
+  /** Which day the editor shows: explicit route date (if still editable), else yesterday when it's past midnight and yesterday's entry is missing. */
+  function pickDate(s, param) {
+    const today = C.dateKey(), y = C.addDays(today, -1);
+    if (param && C.isEditable(param) && param >= s.createdAt) return param;
+    if (new Date().getHours() < 4 && y >= s.createdAt && !C.journalDone(s, y)) return y;
+    return today;
+  }
 
   function counter(text, min) {
     const n = C.countSentences(text);
@@ -22,16 +29,21 @@
 
   App.pages.journal = {
     title: 'Jurnal',
-    render() {
-      const s = App.S(), k = C.dateKey(), min = s.settings.journalMinSentences || 5;
+    render(params = []) {
+      const s = App.S(), today = C.dateKey(), min = s.settings.journalMinSentences || 5;
+      const k = curK = pickDate(s, params[0]);
+      const y = C.addDays(today, -1), canY = y >= s.createdAt;
       const e = C.journalEntry(s, k) || { text: '', mood: 0 };
       const done = C.journalDone(s, k);
-      const start = C.addDays(k, -29) < s.createdAt ? s.createdAt : C.addDays(k, -29);
-      const days = C.rangeKeys(start, k);
+      const start = C.addDays(today, -29) < s.createdAt ? s.createdAt : C.addDays(today, -29);
+      const days = C.rangeKeys(start, today);
       const all = Object.keys(s.journal.entries).filter(d => (s.journal.entries[d].text || '').trim()).sort().reverse();
       const q = query.trim().toLowerCase();
       const list = all.filter(d => d !== k && (!q || s.journal.entries[d].text.toLowerCase().includes(q)));
-      return `<div class="card">
+      const tab = (d, l) => `<a href="#/journal/${d}" class="${d === k ? 'on' : ''}">${l}${C.journalDone(s, d) ? ' ✓' : ''}</a>`;
+      return `${canY ? `<div class="tabs" style="margin-bottom:12px">${tab(y, 'Kemarin')}${tab(today, 'Hari ini')}</div>` : ''}
+        ${k !== today ? `<div class="note-box" style="margin-bottom:12px">${icon('clock', 14)} Kamu menulis jurnal untuk <b>kemarin</b>. Masih bisa sampai malam ini; habit kemarin ikut tercentang otomatis.</div>` : ''}
+        <div class="card">
           <div class="row"><div style="flex:1"><h3>${esc(C.formatDate(k))}</h3><p class="muted small">Tulis sekitar ${min} kalimat sebelum tidur. Tersimpan otomatis.</p></div>
             ${done ? `<span class="pill good">${icon('check', 12)}Selesai</span>` : ''}</div>
           <div style="margin:12px 0;display:grid;grid-template-columns:repeat(5,1fr);gap:6px" role="group" aria-label="Mood hari ini">${MOODS.map(([v, l]) => `<button class="chip ${e.mood === v ? 'active' : ''}" style="justify-content:center;padding:8px 4px" data-act="jMood" data-v="${v}">${l}</button>`).join('')}</div>
@@ -44,7 +56,7 @@
           <button class="btn block primary" style="margin-top:12px" data-act="jSave">${icon('check', 16)}Simpan jurnal</button>
         </div>
         <div class="kpis" style="margin-top:14px;grid-template-columns:repeat(3,1fr)">
-          <div class="kpi"><small>Streak</small><b>${C.journalStreak(s)}</b><span>malam</span></div>
+          <div class="kpi"><small>Streak</small><b>${C.journalStreak(s, today)}</b><span>malam</span></div>
           <div class="kpi"><small>30 hari</small><b>${days.filter(d => C.journalDone(s, d)).length}/${days.length}</b></div>
           <div class="kpi"><small>Total</small><b>${C.journalDays(s)}</b><span>jurnal</span></div>
         </div>
@@ -61,9 +73,17 @@
     },
     mount(view) {
       const ta = view.querySelector('#jText');
+      let prevN = ta ? C.countSentences(ta.value) : 0;
       if (ta) ta.addEventListener('input', () => {
         const min = App.S().settings.journalMinSentences || 5;
         view.querySelector('#jCounter').innerHTML = counter(ta.value, min);
+        const n = C.countSentences(ta.value);
+        if (window.Motion && n !== prevN) {
+          const cEl = view.querySelector('#jCount');
+          Motion.pulse(cEl);
+          if (n >= min && prevN < min && cEl) { const r = cEl.getBoundingClientRect(); Motion.burst(r.left + r.width / 2, r.top + r.height / 2, 16); Motion.floatText(r.left + r.width / 2, r.top - 4, 'Target tercapai!', 'good'); }
+        }
+        prevN = n;
         view.querySelector('#jSaved').textContent = 'Mengetik…';
         clearTimeout(saveTimer);
         saveTimer = setTimeout(() => save(ta.value, { render: false }), 900);
@@ -80,7 +100,8 @@
 
   function save(text, { render = true, mood } = {}) {
     clearTimeout(saveTimer);
-    const k = C.dateKey();
+    const k = curK || C.dateKey();
+    if (!C.isEditable(k)) { UI.toast('Hari itu sudah terkunci. Teks disalin ke hari ini.', 'info'); curK = C.dateKey(); return save(text, { render: true, mood }); }
     App.commit(s => {
       const cur = s.journal.entries[k] || { text: '', mood: 0, at: new Date().toISOString() };
       cur.text = String(text).replace(/\s+$/, '');
@@ -90,15 +111,15 @@
     }, { render, quiet: !render });
     if (!render) { const el = document.querySelector('#jSaved'); if (el) el.textContent = 'Tersimpan ' + timeOf(new Date().toISOString()); }
   }
-  const curText = () => { const ta = document.querySelector('#jText'); return ta ? ta.value : ((C.journalEntry(App.S(), C.dateKey()) || {}).text || ''); };
+  const curText = () => { const ta = document.querySelector('#jText'); return ta ? ta.value : ((C.journalEntry(App.S(), curK || C.dateKey()) || {}).text || ''); };
 
   Object.assign(App.actions, {
     jSave: () => {
-      const s = App.S(), min = s.settings.journalMinSentences || 5, n = C.countSentences(curText());
+      const s = App.S(), min = s.settings.journalMinSentences || 5, n = C.countSentences(curText()), wasY = curK && curK !== C.dateKey();
       save(curText());
-      UI.toast(n >= min ? 'Jurnal tersimpan. Selamat istirahat.' : 'Tersimpan. ' + (min - n) + ' kalimat lagi untuk menyelesaikan habit.', n >= min ? 'good' : 'info');
+      UI.toast(n >= min ? (wasY ? 'Jurnal kemarin tersimpan & habit kemarin tercentang.' : 'Jurnal tersimpan. Selamat istirahat.') : 'Tersimpan. ' + (min - n) + ' kalimat lagi untuk menyelesaikan habit.', n >= min ? 'good' : 'info');
     },
-    jMood: (el) => { const v = +el.dataset.v; const e = C.journalEntry(App.S(), C.dateKey()); save(curText(), { mood: e && e.mood === v ? 0 : v }); },
+    jMood: (el) => { const v = +el.dataset.v; const e = C.journalEntry(App.S(), curK || C.dateKey()); save(curText(), { mood: e && e.mood === v ? 0 : v }); },
     jPrompt: (el) => {
       const ta = document.querySelector('#jText'); if (!ta) return;
       const p = PROMPTS[+el.dataset.i][1];

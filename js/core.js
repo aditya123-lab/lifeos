@@ -242,7 +242,7 @@
         mealsRequired: 3, journalMinSentences: 5,
         pomodoro: { focus: 25, short: 5, long: 10, focus2: 50 },
         notif: { enabled: false, quietStart: '22:30', quietEnd: '04:45', inApp: true },
-        achievementsEnabled: true, rewardsEnabled: true,
+        achievementsEnabled: true, rewardsEnabled: true, motion: true, character: 'zeus',
         private: { showInStats: false, xpEnabled: true, pinHash: '' }
       },
       habits,
@@ -291,7 +291,7 @@
       },
       supplements: [{ id: 's_creatine', name: 'Creatine', dose: '', time: '06:30', active: true }],
       suppLogs: {},       // { date: { suppId: at } }
-      selfControl: { active: false, activatedAt: '', streakStart: '', longest: 0, checkins: {}, notes: [], setbacks: [] },
+      selfControl: { active: false, activatedAt: '', streakStart: '', longest: 0, checkins: {}, notes: [], setbacks: [], urges: [] },
       events: [],         // { id, title, type, date, start, end, recur, until, exceptions:[], reminder, notes }
       reminders: defaultReminders(gymDays),
       reminderLog: {},    // { 'date|reminderId': at }  (prevents duplicate firing)
@@ -561,10 +561,14 @@
 
   // ---------------------------------------------------------------- task actions (pure, mutate state)
   const habitKey = (id, k) => 'habit:' + id + ':' + k;
+  /** Today and yesterday can still be changed (e.g. journal written after midnight). Older days are locked. */
+  const EDITABLE_DAYS = 1;
+  function isEditable(k, now = new Date()) { const t = dateKey(now); return k <= t && k >= addDays(t, -EDITABLE_DAYS); }
+  const LOCK_MSG = 'Hanya hari ini dan kemarin yang bisa diubah';
   function completeHabit(state, id, k, { auto = false } = {}, now = new Date()) {
     const h = state.habits.find(x => x.id === id);
     if (!h) return { ok: false, err: 'Habit tidak ditemukan' };
-    if (k !== dateKey(now)) return { ok: false, err: 'Hanya tugas hari ini yang bisa diselesaikan' };
+    if (!isEditable(k, now)) return { ok: false, err: LOCK_MSG };
     state.logs[k] = state.logs[k] || {};
     const cur = state.logs[k][id];
     if (cur && cur.s === 'done') return { ok: false, err: 'Sudah selesai' };
@@ -574,7 +578,7 @@
     return { ok: true, tx, bonus };
   }
   function uncompleteHabit(state, id, k, now = new Date()) {
-    if (k !== dateKey(now)) return { ok: false, err: 'Riwayat hari sebelumnya tidak dapat diubah' };
+    if (!isEditable(k, now)) return { ok: false, err: LOCK_MSG };
     const cur = state.logs[k] && state.logs[k][id];
     if (!cur || cur.s !== 'done') return { ok: false };
     delete state.logs[k][id];
@@ -583,7 +587,7 @@
     return { ok: true };
   }
   function skipHabit(state, id, k, reason, now = new Date()) {
-    if (k !== dateKey(now)) return { ok: false, err: 'Hanya tugas hari ini' };
+    if (!isEditable(k, now)) return { ok: false, err: LOCK_MSG };
     state.logs[k] = state.logs[k] || {};
     if (state.logs[k][id] && state.logs[k][id].s === 'done') revokeXP(state, habitKey(id, k), 'Dilewati', now);
     state.logs[k][id] = { s: 'skipped', at: now.toISOString(), reason: (reason || '').trim() || 'Tanpa alasan' };
@@ -591,7 +595,7 @@
     return { ok: true };
   }
   function unskipHabit(state, id, k, now = new Date()) {
-    if (k !== dateKey(now)) return { ok: false };
+    if (!isEditable(k, now)) return { ok: false };
     if (state.logs[k] && state.logs[k][id] && state.logs[k][id].s === 'skipped') delete state.logs[k][id];
     return { ok: true };
   }
@@ -610,9 +614,18 @@
     }
     return res;
   }
-  /** Sync habits linked to modules (study/copy/gym/meals/water/supplements) for today. */
+  /** Sync habits linked to modules (study/copy/gym/meals/water/supplements/journal) for every editable day. */
   function syncLinked(state, now = new Date()) {
-    const k = dateKey(now);
+    const changes = [];
+    const t = dateKey(now);
+    for (let i = EDITABLE_DAYS; i >= 0; i--) {
+      const k = addDays(t, -i);
+      if (k < state.createdAt) continue;
+      changes.push(...syncLinkedDay(state, k, now));
+    }
+    return changes;
+  }
+  function syncLinkedDay(state, k, now) {
     const changes = [];
     for (const h of habitsFor(state, k)) {
       if (!h.link || !h.active) continue;
@@ -870,7 +883,7 @@
     nutrientsFor, sumNutrients, suggestTargets, defaultState, defaultHabits, migrate,
     xpRequired, cumulativeXP, rankFor, levelInfo, totalXP, spentXP, balanceXP, awardXP, revokeXP, hasActiveTx, xpOnDate,
     isScheduled, isMandatoryOn, habitsFor, statusOf, dayStats, isSuccessDay, currentStreak, longestStreak, rangeCompletion, restDaysInWeek,
-    habitConsistency, countDone, maxRun, priorityTasks, minutesOn, minutesIn, studyTarget, nutritionDay, workoutsIn, linkSatisfied, countSentences, journalEntry, journalDone, journalDays, journalStreak,
+    habitConsistency, countDone, maxRun, priorityTasks, minutesOn, minutesIn, studyTarget, nutritionDay, workoutsIn, linkSatisfied, isEditable, EDITABLE_DAYS, countSentences, journalEntry, journalDone, journalDays, journalStreak,
     habitKey, completeHabit, uncompleteHabit, skipHabit, unskipHabit, checkRoutineBonus, syncLinked,
     ACHIEVEMENTS, checkAchievements, nextAchievement, studyMinutesTotal, mealDays, bestWeekPct,
     PRIVATE_MILESTONES, PRIVATE_XP, privateStreak, privateClaimMilestones, privateSetback,

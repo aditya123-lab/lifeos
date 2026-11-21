@@ -15,6 +15,7 @@
     { id: 'supplements', label: 'Suplemen', icon: 'pill', group: 'mod' },
     { id: 'journal', label: 'Jurnal', icon: 'note', group: 'mod' },
     { id: 'private', label: 'Ruang Privat', icon: 'shield', group: 'mod' },
+    { id: 'karakter', label: 'Karakter', icon: 'user', group: 'growth' },
     { id: 'progress', label: 'Progress', icon: 'chart', group: 'growth' },
     { id: 'achievements', label: 'Achievement', icon: 'trophy', group: 'growth' },
     { id: 'rewards', label: 'Reward Shop', icon: 'gift', group: 'growth' },
@@ -31,6 +32,7 @@
     commit(mutator, { render = true, quiet = false } = {}) {
       const s = Store.get();
       const lvBefore = C.levelInfo(C.totalXP(s), s.settings.levelBase, s.settings.levelExp);
+      const tk = C.dateKey(), dsBefore = C.dayStats(s, tk);
       const result = mutator(s);
       const linked = C.syncLinked(s);
       const unlocked = C.checkAchievements(s);
@@ -42,7 +44,12 @@
       for (const c of linked) if (c.done) UI.toast('Otomatis selesai: ' + c.h.name, 'good');
       if (lvAfter.level > lvBefore.level) {
         const rankUp = lvAfter.rank.name !== lvBefore.rank.name;
-        setTimeout(() => UI.celebrate({ title: 'Level Up! Level ' + lvAfter.level, subtitle: rankUp ? 'Rank baru: ' + lvAfter.rank.name + '. Konsistensimu terbayar.' : 'Rank ' + lvAfter.rank.name + ' · ' + fmt(lvAfter.toNext) + ' XP ke level berikutnya', iconName: 'crown', color: lvAfter.rank.color }), 250);
+        const ch = rankUp && root.Character && root.Character.keyOf(s);
+        setTimeout(() => UI.celebrate({ title: 'Level Up! Level ' + lvAfter.level, subtitle: rankUp ? (ch ? 'Rank baru: ' + lvAfter.rank.name + '. ' + (ch === 'zeus' ? 'Zeus' : 'Ronin') + ' berevolusi menjadi ' + root.Character.forms(s)[root.Character.tierOf(lvAfter.level)].name + '.' : 'Rank baru: ' + lvAfter.rank.name + '. Konsistensimu terbayar.') : 'Rank ' + lvAfter.rank.name + ' · ' + fmt(lvAfter.toNext) + ' XP ke level berikutnya', iconName: 'crown', color: lvAfter.rank.color, art: ch ? root.Character.svg(root.Character.tierOf(lvAfter.level), { size: 130 }) : '' }), 250);
+      }
+      const dsAfter = C.dayStats(s, tk);
+      if (!quiet && dsAfter.total > 0 && dsAfter.pct >= 1 && dsBefore.pct < 1 && !dsAfter.rest) {
+        setTimeout(() => { if (root.Motion) root.Motion.confetti(); UI.toast('Semua tugas wajib hari ini selesai! 🎉', 'good', 3200); }, 350);
       }
       unlocked.forEach((a, i) => setTimeout(() => UI.celebrate({ title: a.name, subtitle: 'Achievement terbuka · +' + a.xp + ' XP — ' + a.desc, iconName: a.icon }), 400 + i * 200));
       if (render) App.render();
@@ -64,6 +71,8 @@
       const page = App.pages[App.route.name];
       const view = UI.$('#view');
       const y = window.scrollY;
+      const entered = !App._rendered || prev !== App.route.name;
+      const snap = root.Motion ? root.Motion.capture(view) : null;
       try {
         view.innerHTML = page.render(App.route.params);
         if (page.mount) page.mount(view, App.route.params);
@@ -73,7 +82,9 @@
       }
       if (prev !== App.route.name) { window.scrollTo(0, 0); view.style.animation = 'none'; void view.offsetWidth; view.style.animation = ''; }
       else window.scrollTo(0, y);
+      App._rendered = true;
       App.renderChrome();
+      if (root.Motion) root.Motion.after(view, { entered, snap });
     },
 
     renderChrome() {
@@ -92,12 +103,17 @@
       UI.$('#bottomnav').innerHTML = BOTTOM.map(id => {
         if (id === 'menu') { const inMenu = !['dashboard', 'habits', 'calendar', 'progress'].includes(cur); return `<a href="#/menu" class="${inMenu ? 'active' : ''}">${icon('grid', 22)}<span>Menu</span></a>`; }
         const n = NAV.find(x => x.id === id);
-        return `<a href="#/${id}" class="${cur === id ? 'active' : ''}">${icon(n.icon, 22)}<span>${n.label}</span></a>`;
+        return `<a href="#/${id}" class="${cur === id ? 'active' : ''}${cur === id && App._navPrev !== cur ? ' pop' : ''}">${icon(n.icon, 22)}<span>${n.label}</span></a>`;
       }).join('');
+      App._navPrev = cur;
       const theme = document.documentElement.dataset.theme;
-      UI.$('#topbar').innerHTML = `<h1>${esc(page && page.title ? (typeof page.title === 'function' ? page.title() : page.title) : 'LIFE OS')}</h1>
-        <a class="xp-chip" href="#/progress" title="Level & XP">${icon('bolt', 15)}Lv ${lv.level} · ${fmt(C.balanceXP(s))} XP</a>
+      const topHTML = `<h1>${esc(page && page.title ? (typeof page.title === 'function' ? page.title() : page.title) : 'LIFE OS')}</h1>
+        <a class="xp-chip" href="#/progress" title="Level & XP">${icon('bolt', 15)}Lv ${lv.level} · <span class="xp-val">${fmt(C.balanceXP(s))}</span> XP</a>
         <button class="icon-btn" data-act="toggleTheme" aria-label="Ganti tema">${icon(theme === 'dark' ? 'sun' : 'moon', 19)}</button>`;
+      if (topHTML !== App._topHTML) { UI.$('#topbar').innerHTML = topHTML; App._topHTML = topHTML; } // unchanged -> keep DOM so the XP animation isn't cut
+      const bal = C.balanceXP(s);
+      if (root.Motion) root.Motion.xpChip(UI.$('#topbar .xp-chip'), App._xpPrev, bal, fmt(bal));
+      App._xpPrev = bal;
       App.renderBanner();
       App.timer.renderDock();
     },
@@ -114,6 +130,7 @@
     },
 
     applyTheme() {
+      if (root.Motion) root.Motion.apply();
       let t = Store.get().settings.theme;
       if (t === 'system') t = matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
       document.documentElement.dataset.theme = t;
@@ -158,17 +175,17 @@
       const s = Store.get();
       const h = s.habits.find(x => x.id === id);
       if (!h) return;
-      const today = k === C.dateKey();
+      const today = C.isEditable(k);
       const st = C.statusOf(s, k, id);
       const pinned = (s.topPicks[k] || []).includes(id);
       const cons = C.habitConsistency(s, h, C.addDays(C.dateKey(), -29), C.dateKey());
       const body = `<p class="muted small">${esc(C.CATEGORIES[h.cat] || '')} · ${C.DIFFICULTY[h.difficulty] || ''} · ${h.mandatory ? 'Wajib' : 'Opsional' + (h.mandatoryDays && h.mandatoryDays.length ? ' (wajib ' + h.mandatoryDays.map(d => C.DAY_SHORT[d]).join(', ') + ')' : '')} · +${h.xp} XP</p>
         <div class="kpis" style="margin:12px 0"><div class="kpi"><small>Konsistensi 30 hari</small><b>${cons.pct == null ? '—' : UI.pct(cons.pct)}</b></div><div class="kpi"><small>Total selesai</small><b>${C.countDone(s, id)}</b><span>kali</span></div></div>
-        ${st ? `<p class="small">Status ${today ? 'hari ini' : C.formatDate(k)}: <b>${st.s === 'done' ? 'Selesai' : 'Dilewati'}</b>${st.at ? ' · ' + new Date(st.at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : ''}${st.reason ? ' · ' + esc(st.reason) : ''}</p>` : ''}
-        ${!today ? '<p class="note-box" style="margin-top:10px">Riwayat hari sebelumnya bersifat permanen dan tidak dapat diubah (mencegah klaim XP ganda).</p>' : ''}`;
+        ${st ? `<p class="small">Status ${k === C.dateKey() ? 'hari ini' : C.formatDate(k)}: <b>${st.s === 'done' ? 'Selesai' : 'Dilewati'}</b>${st.at ? ' · ' + new Date(st.at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : ''}${st.reason ? ' · ' + esc(st.reason) : ''}</p>` : ''}
+        ${!today ? '<p class="note-box" style="margin-top:10px">Hanya hari ini dan kemarin yang bisa diubah. Riwayat yang lebih lama bersifat permanen (mencegah klaim XP ganda).</p>' : ''}`;
       const actions = [];
       if (today) {
-        if (h.link === 'journal') actions.push({ label: 'Tulis jurnal', cls: 'primary', onClick: () => App.go('journal') });
+        if (h.link === 'journal') actions.push({ label: 'Tulis jurnal', cls: 'primary', onClick: () => App.go('journal/' + k) });
         else if (!st || st.s !== 'done') actions.push({ label: 'Selesai', cls: 'primary', onClick: () => App.toggleHabit(id, k) });
         if (st && st.s === 'done') actions.push({ label: 'Batalkan selesai', onClick: () => App.toggleHabit(id, k) });
         if (!st || st.s === 'done') actions.push({ label: 'Lewati…', onClick: () => { setTimeout(() => App.skipHabit(id, k), 220); } });
@@ -178,18 +195,20 @@
       actions.push({ label: 'Edit', cls: 'ghost', onClick: () => { setTimeout(() => App.pages.habits.edit(id), 220); } });
       UI.modal({ title: h.name, body, actions });
     },
-    toggleHabit(id, k) {
+    toggleHabit(id, k, el) {
       const s = Store.get();
       const st = C.statusOf(s, k, id);
-      if (k !== C.dateKey()) return UI.toast('Riwayat hari sebelumnya tidak dapat diubah', 'error');
+      const rect = el && el.getBoundingClientRect ? el.getBoundingClientRect() : (root.Motion && root.Motion.rectOf(`.tick[data-id="${id}"][data-date="${k}"]`));
+      if (!C.isEditable(k)) return UI.toast('Hanya hari ini dan kemarin yang bisa diubah', 'error');
       const hh = s.habits.find(x => x.id === id);
-      if (hh && hh.link === 'journal' && !st) return App.go('journal'); // write the entry instead of ticking blindly
-      App.commit(s2 => {
+      if (hh && hh.link === 'journal' && !st) return App.go('journal/' + k); // write the entry instead of ticking blindly
+      const r = App.commit(s2 => {
         const r = st && st.s === 'done' ? C.uncompleteHabit(s2, id, k) : C.completeHabit(s2, id, k);
         if (r && r.err) UI.toast(r.err, 'error');
-        if (navigator.vibrate && !(st && st.s === 'done')) try { navigator.vibrate(12); } catch (_) {}
         return r;
       });
+      if (r && r.ok && !(st && st.s === 'done') && root.Motion) root.Motion.taskDone(rect, hh ? hh.xp : 0, `.tick[data-id="${id}"][data-date="${k}"]`);
+      else if (r && r.ok && navigator.vibrate) try { navigator.vibrate(8); } catch (_) {}
     },
     async skipHabit(id, k) {
       const s = Store.get(); const h = s.habits.find(x => x.id === id);
@@ -353,7 +372,7 @@
   Object.assign(App.actions, {
     reload: () => location.reload(),
     toggleTheme: () => App.commit(s => { const cur = document.documentElement.dataset.theme; s.settings.theme = cur === 'dark' ? 'light' : 'dark'; App.applyTheme(); }, { quiet: true }),
-    toggleHabit: (el) => App.toggleHabit(el.dataset.id, el.dataset.date),
+    toggleHabit: (el) => App.toggleHabit(el.dataset.id, el.dataset.date, el),
     habitMenu: (el) => App.habitMenu(el.dataset.id, el.dataset.date),
     go: (el) => App.go(el.dataset.to),
     goTimer: (el, e) => { if (e.target.closest('button')) return; const t = Store.get().timer; if (t) App.go(t.module === 'study' ? 'study' : 'copywriting'); },

@@ -7,7 +7,8 @@
   function checklist(dateK) {
     const s = App.S(), today = C.dateKey();
     const k = dateK || today;
-    const ro = k !== today;
+    const ro = !C.isEditable(k);
+    const yest = !ro && k !== today;
     const hs = C.habitsFor(s, k);
     const st = C.dayStats(s, k);
     const byCat = {};
@@ -18,7 +19,8 @@
         <div style="flex:1;text-align:center"><b>${k === today ? 'Hari ini' : C.formatDate(k, { weekday: true })}</b><div class="muted small">${st.done}/${st.total} wajib · ${UI.pct(st.pct)} · +${fmt(st.xp)} XP${st.rest ? ' · Hari istirahat' : ''}</div></div>
         <button class="icon-btn" ${k >= today ? 'disabled style="opacity:.3"' : ''} data-act="go" data-to="habits/today/${C.addDays(k, 1) > today ? today : C.addDays(k, 1)}" aria-label="Hari berikutnya">${icon('right')}</button>
       </div>
-      ${ro ? `<div class="note-box" style="margin-top:10px">${icon('lock', 14)} Mode riwayat (hanya-baca). Catatan yang sudah selesai tidak pernah dihapus. <a href="#/habits/today">Kembali ke hari ini</a></div>` : ''}
+      ${ro ? `<div class="note-box" style="margin-top:10px">${icon('lock', 14)} Mode riwayat (hanya-baca). Hanya hari ini dan kemarin yang bisa diubah. <a href="#/habits/today">Kembali ke hari ini</a></div>` : ''}
+      ${yest ? `<div class="note-box" style="margin-top:10px">${icon('clock', 14)} <b>Kemarin</b> — masih bisa dicentang sampai hari ini berakhir (pukul 23.59). <a href="#/habits/today">Kembali ke hari ini</a></div>` : ''}
       <div style="margin-top:12px">${UI.bar(st.pct, { cls: 'thick' })}</div>
       ${Object.keys(C.CATEGORIES).filter(c => byCat[c]).map(c => `
         <div class="section-title">${esc(C.CATEGORIES[c])}<span class="spacer"></span><span>${byCat[c].filter(h => (C.statusOf(s, k, h.id) || {}).s === 'done').length}/${byCat[c].length}</span></div>

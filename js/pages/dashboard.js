@@ -4,6 +4,7 @@
 
   App.pages.dashboard = {
     title: () => 'Dashboard',
+    mount(view) { if (window.Character) Character.mount(view); },
     render() {
       const s = App.S(), k = C.dateKey(), now = new Date();
       const lv = C.levelInfo(C.totalXP(s), s.settings.levelBase, s.settings.levelExp);
@@ -22,6 +23,9 @@
       const items = C.calendarItems(s, k).filter(i => i.kind !== 'study' && i.kind !== 'copy');
       const exam = s.study.exams.filter(e => e.date >= k).sort((a, b) => a.date.localeCompare(b.date))[0];
       const initial = (s.profile.name || 'U').trim().charAt(0).toUpperCase();
+      const y = C.addDays(k, -1);
+      const yPending = y >= s.createdAt && !s.restDays[y] ? C.habitsFor(s, y).filter(h => C.isMandatoryOn(h, y) && !C.statusOf(s, y, h.id)) : [];
+      const yCard = yPending.length ? `<div class="banner" style="margin-top:14px;align-items:flex-start">${icon('clock', 18)}<span><b>Kemarin masih ada ${yPending.length} tugas wajib belum dicentang</b><br><span class="small muted">${yPending.slice(0, 3).map(h => esc(h.name)).join(', ')}${yPending.length > 3 ? ', …' : ''}. Bisa dilengkapi sampai malam ini.</span></span><span class="spacer"></span><a class="btn sm" href="#/habits/today/${y}">Buka</a></div>` : '';
 
       const periods = C.PERIODS.map(p => {
         let list = hs.filter(h => h.period === p.id);
@@ -35,9 +39,9 @@
       return `
       <div class="grid two">
         <div class="card hero">
-          <div class="hello"><div class="avatar">${esc(initial)}</div>
+          <div class="hello">${window.Character && Character.keyOf(s) ? '' : `<div class="avatar">${esc(initial)}</div>`}
             <div style="flex:1;min-width:0"><h2>${C.greeting(now)}, ${esc(s.profile.name || 'kamu')}</h2>
-            <p class="muted small">${C.formatDate(k, { weekday: true })} · ${esc(s.profile.role || '')}</p></div></div>
+            <p class="muted small">${C.formatDate(k, { weekday: true })} · ${esc(s.profile.role || '')}</p></div></div>${window.Character && Character.keyOf(s) ? Character.hero(s, lv) : ''}
           <div class="level-line"><b>Lv ${lv.level}</b><span class="rank-badge" style="color:${lv.rank.color}">${icon('medal', 13)}${lv.rank.name}</span><span class="spacer"></span><span class="muted small num">${fmt(lv.total)} XP total</span></div>
           ${UI.bar(lv.progress, { cls: 'thick' })}
           <p class="muted small" style="margin-top:6px">${lv.max ? 'Level maksimum tercapai.' : `${fmt(lv.into)} / ${fmt(lv.need)} XP · <b class="accent">${fmt(lv.toNext)} XP</b> lagi ke Level ${lv.level + 1}`}</p>
@@ -49,7 +53,7 @@
             <div class="stack" style="flex:1;gap:8px">
               <div class="row between"><span class="muted small">Tugas wajib</span><b class="num">${st.done}/${st.total}</b></div>
               <div class="row between"><span class="muted small">XP hari ini</span><b class="num accent">+${fmt(st.xp)}</b></div>
-              <div class="row between"><span class="muted small">Streak</span><b class="num">${icon('flame', 15, 'warn')} ${streak} hari</b></div>
+              <div class="row between"><span class="muted small">Streak</span><b class="num">${icon('flame', 15, 'warn' + (streak > 0 ? ' flicker' : ''))} ${streak} hari</b></div>
               <div class="row between"><span class="muted small">Opsional</span><b class="num">${st.optionalDone}/${st.optionalTotal}</b></div>
             </div>
           </div>
@@ -59,6 +63,7 @@
         </div>
       </div>
 
+      ${yCard}
       <div class="section-title">${icon('target', 14)}3 Misi Prioritas<span class="spacer"></span><span class="tiny hide-sm" style="text-transform:none;letter-spacing:0">Ketuk nama tugas → "Jadikan prioritas"</span></div>
       <div class="card">${pri.length ? pri.map((h, i) => {
         const done = (C.statusOf(s, k, h.id) || {}).s === 'done';

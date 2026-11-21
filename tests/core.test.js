@@ -52,7 +52,10 @@ t('skip gives no XP and past days are read-only', () => {
   C.skipHabit(s, 'h_skincare', '2026-11-13', 'Habis', now);
   assert.strictEqual(C.totalXP(s), 0);
   assert.strictEqual(s.logs['2026-11-13'].h_skincare.reason, 'Habis');
-  assert.ok(!C.completeHabit(s, 'h_makebed', '2026-11-12', {}, now).ok);
+  assert.ok(C.completeHabit(s, 'h_makebed', '2026-11-12', {}, now).ok);   // yesterday: still editable
+  assert.ok(!C.completeHabit(s, 'h_makebed', '2026-11-11', {}, now).ok);  // 2 days ago: locked
+  assert.ok(!C.completeHabit(s, 'h_makebed', '2026-11-14', {}, now).ok);  // future: locked
+  assert.ok(!C.skipHabit(s, 'h_room', '2026-11-11', 'x', now).ok);
   assert.ok(!C.completeHabit(s, 'h_makebed', '2026-11-14', {}, now).ok);
 });
 
@@ -265,14 +268,29 @@ t('bodycare habits: lotion AM/PM mandatory, skincare PM optional, migrated once 
   const raw = JSON.parse(JSON.stringify(s)); delete raw.migrations.bodycare;
   raw.habits = raw.habits.filter(h => !['h_lotion_am', 'h_skincare_pm', 'h_lotion_pm'].includes(h.id));
   const m = C.migrate(raw);
-  const night = C.habitsFor(m, '2026-11-19').filter(h => h.period === 'night').map(h => h.id);
+  const night = C.habitsFor(m, C.dateKey()).filter(h => h.period === 'night').map(h => h.id);
   assert.ok(night.indexOf('h_teeth_pm') < night.indexOf('h_skincare_pm') && night.indexOf('h_skincare_pm') < night.indexOf('h_lotion_pm'));
   const raw2 = JSON.parse(JSON.stringify(m)); delete raw2.migrations.faceWash; raw2.habits = raw2.habits.filter(h => h.id !== 'h_faceWash_pm');
-  const n2 = C.habitsFor(C.migrate(raw2), '2026-11-19').filter(h => h.period === 'night').map(h => h.id);
+  const n2 = C.habitsFor(C.migrate(raw2), C.dateKey()).filter(h => h.period === 'night').map(h => h.id);
   assert.deepStrictEqual(n2.slice(n2.indexOf('h_teeth_pm'), n2.indexOf('h_teeth_pm') + 4), ['h_teeth_pm', 'h_faceWash_pm', 'h_skincare_pm', 'h_lotion_pm']);
   assert.ok(g('h_faceWash_pm').mandatory);
   m.habits = m.habits.filter(h => h.id !== 'h_lotion_am');
   assert.ok(!C.migrate(JSON.parse(JSON.stringify(m))).habits.some(h => h.id === 'h_lotion_am'));
+});
+
+t('yesterday editable: late journal after midnight completes yesterday, gives XP once, day before locked', () => {
+  const s = C.defaultState(at('2026-11-10'));
+  const late = at('2026-11-21', 0, 30), y = '2026-11-20';
+  s.journal.entries[y] = { text: 'Satu dua. Tiga empat. Lima enam. Tujuh delapan. Sembilan sepuluh.' };
+  C.syncLinked(s, late);
+  assert.strictEqual(C.statusOf(s, y, 'h_journal').s, 'done');
+  const tx = s.xpTx.find(t => t.key === 'habit:h_journal:' + y);
+  assert.ok(tx && tx.date === y);
+  const xp = C.totalXP(s); C.syncLinked(s, late); assert.strictEqual(C.totalXP(s), xp);
+  s.journal.entries['2026-11-19'] = s.journal.entries[y];
+  C.syncLinked(s, late);
+  assert.ok(!C.statusOf(s, '2026-11-19', 'h_journal')); // too old -> unchanged
+  assert.ok(C.isEditable(y, late) && C.isEditable('2026-11-21', late) && !C.isEditable('2026-11-19', late) && !C.isEditable('2026-11-22', late));
 });
 
 console.log(`\n${passed} tests passed${process.exitCode ? ' (with failures)' : ''}`);

@@ -79,6 +79,10 @@
   }
 
   const look = s => `<div class="card"><div class="card-head">${icon('sun', 18)}<h3>Tema</h3></div><div class="seg">${[['dark', 'Gelap'], ['light', 'Terang'], ['system', 'Ikuti sistem']].map(([v, l]) => `<button class="${s.settings.theme === v ? 'on' : ''}" data-act="setTheme" data-v="${v}">${l}</button>`).join('')}</div></div>
+    <div class="card" style="margin-top:14px"><div class="card-head">${icon('spark', 18)}<h3>Animasi</h3></div><div class="seg">${[['on', 'Aktif'], ['off', 'Mati']].map(([v, l]) => `<button class="${(s.settings.motion !== false) === (v === 'on') ? 'on' : ''}" data-act="setMotion" data-v="${v}">${l}</button>`).join('')}</div>
+      <p class="muted small" style="margin-top:10px">Efek centang, confetti, dan transisi halaman. Matikan jika HP terasa berat. Otomatis mati bila pengaturan "kurangi gerakan" di HP aktif.</p></div>
+    <div class="card" style="margin-top:14px"><div class="card-head">${icon('user', 18)}<h3>Karakter</h3></div><div class="seg">${[['zeus', 'Zeus'], ['ronin', 'Ronin'], ['off', 'Sembunyikan']].map(([v, l]) => `<button class="${(window.Character ? Character.keyOf(s) || 'off' : 'off') === v ? 'on' : ''}" data-act="setCharacter" data-v="${v}">${l}</button>`).join('')}</div>
+      <p class="muted small" style="margin-top:10px">Tampil di Beranda dan berevolusi setiap kamu naik rank. Zeus: patung marmer dewa Yunani. Ronin: samurai berjubah.</p></div>
     <div class="card" style="margin-top:14px"><div class="card-head">${icon('info', 18)}<h3>Bahasa</h3></div><div class="seg"><button class="on">Bahasa Indonesia</button><button disabled title="Belum tersedia">English (segera)</button></div>
       <p class="tiny muted" style="margin-top:8px">Antarmuka saat ini Bahasa Indonesia dengan istilah umum (XP, Level, Streak, Achievement). Terjemahan Inggris belum dibuat.</p></div>`;
 
@@ -133,6 +137,8 @@
     setHabitXp: (f) => { App.commit(s => { s.habits.forEach(h => { const el = f['xp_' + h.id]; if (el && +el.value > 0) h.xp = Math.round(+el.value); }); }, { quiet: true }); UI.toast('Nilai XP disimpan (berlaku untuk penyelesaian berikutnya)', 'good'); },
     setFlag: (el) => App.commit(s => { s.settings[el.dataset.k] = el.checked; }, { quiet: true }),
     setTheme: (el) => App.commit(s => { s.settings.theme = el.dataset.v; App.applyTheme(); }, { quiet: true }),
+    setCharacter: (el) => App.commit(s => { s.settings.character = el.dataset.v; }, { quiet: true }),
+    setMotion: (el) => { App.commit(s => { s.settings.motion = el.dataset.v === 'on'; }, { quiet: true }); Motion.apply(); if (el.dataset.v === 'on') { const r = el.getBoundingClientRect(); Motion.burst(r.left + r.width / 2, r.top + r.height / 2, 14); } },
     nfPerm: async () => { await Notify.requestPermission(); App.render(); },
     nfEnabled: (el) => App.commit(s => { s.settings.notif.enabled = el.checked; }, { quiet: true }),
     nfTest: async () => { const ch = await Notify.show('LIFE OS', 'Notifikasi uji berhasil. Pengingatmu akan tampil seperti ini.', 'test', { hash: '#/settings/notif' }); UI.toast(ch === 'system' ? 'Notifikasi sistem dikirim' : 'Ditampilkan dalam aplikasi (izin notifikasi belum aktif)', ch === 'system' ? 'good' : 'info', 3500); },

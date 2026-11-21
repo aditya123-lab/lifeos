@@ -246,12 +246,13 @@
     const o = cq.shift(); if (!o) { cActive = false; return; }
     cActive = true; showCelebration(o);
   }
-  function showCelebration({ title, subtitle, iconName = 'trophy', color = 'var(--accent)' }) {
+  function showCelebration({ title, subtitle, iconName = 'trophy', color = 'var(--accent)', art = '' }) {
     const el = document.createElement('div');
     el.className = 'celebrate';
-    el.innerHTML = `<div class="celebrate-card"><div class="celebrate-glow" style="--c:${color}"></div><div class="celebrate-icon">${icon(iconName, 40)}</div><h2>${esc(title)}</h2><p>${esc(subtitle || '')}</p><button class="btn primary">Lanjutkan</button></div>`;
+    el.innerHTML = `<div class="celebrate-card"><div class="celebrate-glow" style="--c:${color}"></div>${art ? `<div class="celebrate-art">${art}</div>` : `<div class="celebrate-icon">${icon(iconName, 40)}</div>`}<h2>${esc(title)}</h2><p>${esc(subtitle || '')}</p><button class="btn primary">Lanjutkan</button></div>`;
     document.body.appendChild(el);
     requestAnimationFrame(() => el.classList.add('show'));
+    if (root.Motion) setTimeout(() => root.Motion.confetti({ count: 90 }), 120);
     let closed = false;
     const close = () => { if (closed) return; closed = true; el.classList.remove('show'); setTimeout(() => { el.remove(); nextCelebration(); }, 280); };
     el.addEventListener('click', (e) => { if (e.target === el || e.target.closest('button')) close(); });
